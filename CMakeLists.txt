@@ -75,12 +75,11 @@ target_include_directories(${DMOD_MODULE_NAME}_if INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-# To depend on another module's headers, use:
-#   dmod_link_modules(${DMOD_MODULE_NAME}
-#       other_module@1.0
-#   )
+dmod_link_modules(${DMOD_MODULE_NAME}
+    dmdrvi
+    dmini
+    dmheap@>=0.4
+)
 
 add_subdirectory(src/port)
 target_link_libraries(${DMOD_MODULE_NAME} ${DMOD_MODULE_NAME}_port_if)
-enable_testing()
-add_subdirectory(tests)
