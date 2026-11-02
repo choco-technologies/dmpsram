@@ -80,37 +80,6 @@ static int verify_access(const dmpsram_port_result_t *result)
     return ok ? 0 : -EIO;
 }
 
-#define DEFAULT_HEAPS_MAX   8U
-
-/**
- * dmheap_init() puts every new heap on the list of the default heaps, and the allocations that name no heap try the newest
- * first. The PSRAM is slower than the internal RAM and not everything may live in it (the stacks of the threads and the objects
- * of the RTOS are accessed with the cache busy or the interrupts masked), so by default it is only what is left when the other
- * heaps are full: it goes to the end of the list - the heaps are re-added behind it, the oldest first. A 'tagged' heap is not on
- * the list at all.
- */
-static void place_in_default_list(dmheap_context_t *psram, bool spill_over)
-{
-    dmheap_context_t *others[DEFAULT_HEAPS_MAX];
-    size_t count = 0;
-
-    Dmod_EnterCritical();
-    size_t total = dmheap_get_default_context_count();
-    for (size_t i = 0; i < total && count < DEFAULT_HEAPS_MAX; i++)
-    {
-        dmheap_context_t *heap = dmheap_get_default_context_at(i);
-        if (heap != NULL && heap != psram)
-            others[count++] = heap;
-    }
-
-    dmheap_set_default_context(NULL);                   /* clears the list */
-    if (spill_over)
-        dmheap_add_default_context(psram);              /* the oldest: the last one tried */
-    for (size_t i = 0; i < count; i++)
-        dmheap_add_default_context(others[i]);
-    Dmod_ExitCritical();
-}
-
 static int configure(dmdrvi_context_t context)
 {
     dmpsram_config_t *c = &context->config;
@@ -145,7 +114,10 @@ static int configure(dmdrvi_context_t context)
         {
             /* The tags let the memory be asked for by name (Dmod_MallocTagged). */
             dmheap_set_context_name(context->heap_ctx, "psram,external,slow");
-            place_in_default_list(context->heap_ctx, c->heap_usage == dmpsram_heap_usage_use_as_heap);
+            /* dmheap_init() has put the heap on the default list as the newest one, which the allocations that name no heap try
+             * first. A 'tagged' heap is taken off the list. */
+            if (c->heap_usage == dmpsram_heap_usage_tagged)
+                dmheap_remove_default_context(context->heap_ctx);
         }
     }
 

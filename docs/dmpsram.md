@@ -15,16 +15,17 @@
      the same entries are seen by the instruction bus at `0x43800000`;
    - a test of the cache: patterns written through the data cache, written back, the cache dropped, read back through both buses.
 2. `verify` (default on): patterns of 32 and 8 bits at the start, in the middle and at the end.
-3. `heap_usage`: `dmheap_init()` of the region, the tags `psram,external,slow`; for `heap` the heap goes to the end of the default
-   list (see below), for `tagged` it is taken off the list.
+3. `heap_usage`: `dmheap_init()` of the region, the tags `psram,external,slow`; `heap` leaves it on the default list (see
+   below), `tagged` takes it off.
 4. The device `/dev/psram`.
 
-## The heap and the order of the default heaps
+## The heap
 
-dmheap puts every new heap on its list of the default heaps and tries **the newest first**. For the PSRAM that is the wrong way
-round (it is the slowest memory, and the stacks and the objects of the RTOS should stay in the internal RAM), so the driver
-re-orders the list: the PSRAM is the last one tried. What does not fit the internal RAM - the decompression buffer of a big module,
-the module itself - lands in it. A module in the PSRAM is executed there.
+`dmheap_init()` puts the new heap on the list of the default heaps, and the allocations that name no heap try **the newest first**.
+With `heap_usage=heap` that is how it stays: once dmpsram is up, what is allocated goes to the PSRAM, and the internal RAM is
+kept for what comes before it and for the callers that ask for it by tag (`main`). This includes the stacks and the control
+blocks of the threads, the objects of the RTOS and the modules, which are loaded into it and executed there. `heap_usage=tagged`
+takes the heap off the list.
 
 ## Memory map (ESP32-S3)
 

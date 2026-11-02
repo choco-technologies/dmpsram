@@ -98,6 +98,12 @@
 #define ROM_CACHE_RESUME_DCACHE         0x400018c0UL
 #define ROM_CACHE_INVALIDATE_DCACHE_ALL 0x400016e0UL
 #define ROM_CACHE_WRITEBACK_ALL         0x400016f8UL
+#define ROM_CONFIG_DATA_CACHE_MODE      0x40001a28UL    /* (size, ways, line size) */
 #define ROM_SPIFLASH_OPI_DTR_MODE       7
+
+/* The data cache as ESP-IDF sets it up for the octal PSRAM */
+#define DCACHE_SIZE_BYTES               (32U * 1024U)
+#define DCACHE_WAYS                     8U
+#define DCACHE_LINE_BYTES               32U
 
 #endif /* ESP32S3_PSRAM_H */

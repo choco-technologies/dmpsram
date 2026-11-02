@@ -10,8 +10,9 @@ as an additional heap.
 
 - **Octal PSRAM of the ESP32-S3** (ESP32-S3R8 / FN16R8: 8 MB, AP Memory): pins, MSPI controller, mode registers of the chip,
   the MMU of the cache. Mapped at `0x3D800000` (data bus), the instruction bus sees it at `0x43800000`.
-- **dmheap integration**: `heap_usage=heap` puts the memory at the end of the default heaps, so it is what is left when the
-  internal RAM is full; `heap_usage=tagged` keeps it off the list (only `Dmod_MallocTagged("psram", ...)` gets memory from it).
+- **dmheap integration**: `heap_usage=heap` registers the memory with dmheap, which tries the newest heap first: the PSRAM is
+  used first and the (faster, scarcer) internal RAM is what is left; `heap_usage=tagged` keeps it off the default list (only
+  `Dmod_MallocTagged("psram", ...)` gets memory from it).
 - **Modules run from it**: the loader of dmod writes a module there and executes it through the instruction bus (dmod
   `Dmod_SyncCode` writes the data cache back and invalidates the instruction cache).
 - **Checks itself** before it is used: patterns through the data cache, pushed out to the chip, read back through both buses.

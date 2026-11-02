@@ -184,6 +184,11 @@ static void __attribute__((noinline)) map_critical(uint32_t first_entry, uint32_
 {
     uint32_t autoload = ((uint32_t (*)(void))ROM_CACHE_SUSPEND_DCACHE)();
 
+    /* The data cache mode (size, ways, line) must match what the PSRAM serves: the ROM leaves the lines at 16 bytes, ESP-IDF
+       sets 32 KB, 8 ways, 32-byte lines for the octal PSRAM (CONFIG_ESP32S3_DATA_CACHE_*). With the 16-byte lines the data
+       that comes back from the chip is wrong from time to time (a NULL where a pointer was stored). */
+    ((void (*)(uint32_t, uint32_t, uint32_t))ROM_CONFIG_DATA_CACHE_MODE)(DCACHE_SIZE_BYTES, DCACHE_WAYS, DCACHE_LINE_BYTES);
+
     config_cache_phases();
 
     for (uint32_t i = 0; i < entries; i++)
