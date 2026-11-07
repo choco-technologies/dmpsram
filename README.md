@@ -10,8 +10,8 @@ as an additional heap. The driver knows the CHIP; the controller it is wired to 
 ## Features
 
 - **Octal PSRAM** (ESP32-S3R8 / FN16R8: 8 MB, AP Memory; 8 lines, DDR): the mode registers of the chip. **Quad PSRAM** (APS6404L,
-  ESP-PSRAM64H: 8 MB, e.g. on the LILYGO T-Deck Pro): ID, reset, the QPI mode. Both mapped at `0x3D800000` (data bus) by the controller,
-  the instruction bus sees them at `0x43800000`.
+  ESP-PSRAM64H: 8 MB, e.g. on the LILYGO T-Deck Pro): ID, reset, the QPI mode. Both mapped at `0x3D800000` (data bus) by the controller
+  (the instruction bus sees them at `0x43800000`: the loader of dmod runs modules from there).
 - **dmheap integration**: `heap_usage=heap` registers the memory with dmheap, which tries the newest heap first: the PSRAM is
   used first and the (faster, scarcer) internal RAM is what is left; `heap_usage=tagged` keeps it off the default list (only
   `Dmod_MallocTagged("psram", ...)` gets memory from it).

@@ -29,7 +29,6 @@ typedef enum
     dmpsram_ioctl_cmd_get_memory_size,          /**< arg = uint32_t* - size in bytes of the mapped memory */
     dmpsram_ioctl_cmd_get_frequency,            /**< arg = uint32_t* - clock of the PSRAM in Hz */
     dmpsram_ioctl_cmd_get_heap_context,         /**< arg = dmheap_context_t** - heap context, or NULL if not used as heap */
-    dmpsram_ioctl_cmd_get_code_start,           /**< arg = void** - the memory seen by the instruction bus, or NULL */
 
     dmpsram_ioctl_cmd_max
 } dmpsram_ioctl_cmd_t;

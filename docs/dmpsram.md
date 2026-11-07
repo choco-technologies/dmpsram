@@ -4,12 +4,13 @@
 
 | | |
 |---|---|
-| **dmqspi** (and its port) | The controller: the pads, the clock, the commands on the bus (`DMQSPI_IOCTL_TRANSFER`), the window in the address space of the CPU (the cache and the MMU on the ESP32-S3: `DMQSPI_IOCTL_ENTER_MAPPED_RW`) |
+| **dmqspi** (and its port) | The controller: the pads, the clock, the commands on the bus (`dmqspi_transfer`), the window in the address space of the CPU (`dmqspi_map`; the cache and the MMU on the ESP32-S3) |
 | **dmpsram** | The chip: how to wake it up, how big it is, which commands read and write it; the self-test, the heap, `/dev/psram` |
 
-The driver sends its commands with the function `dmqspi_ioctl(instance, ...)`, not through the node of the controller: the memory has to
-be a heap before the drivers that follow it are created, and the file system of the devices is not there yet (a friend is told about at
-mount time). The module requires dmqspi, so dmdevfs configures the controller first.
+The driver uses the controller through the functions of dmqspi (`dmqspi_transfer`, `dmqspi_map`, ...), keyed by the number of the controller
+(`qspi_instance`), not through its node: the memory has to be a heap before the drivers that follow it are created, and the nodes of the devices
+(what a friend of a driver is told about) are there only after all the drivers are configured. The module requires dmqspi, so dmdevfs configures
+the controller first (it resolves the dependencies ahead of `driver_order`).
 
 ## Configuration
 
@@ -46,10 +47,10 @@ verify=on
      the EID say it is a PSRAM and how big), reset (`0x66`, `0x99`), enter the QPI mode (`0x35`).
    - **octal** (AP Memory, 1.8 V; the OPI DTR mode, 8 lines, DDR): the mode registers - the latency and the fixed latency in MR0, then
      the vendor (MR1: `0x0D`) and the density (MR2). No answer: `-ENODEV`.
-2. Asks the controller to map the chip (`DMQSPI_IOCTL_ENTER_MAPPED_RW`) with the commands it should send for a read (quad: `0xEB`, 6
-   dummy cycles; octal: `0x00`, 10) and for a write (quad: `0x38`; octal: `0x80`, 5).
-3. `verify` (default on): patterns written through the data cache, written back (`DMQSPI_IOCTL_INVALIDATE_MAPPED`), the cache dropped,
-   read back through the data bus and through the instruction bus; 8-bit accesses.
+2. Asks the controller to map the chip (`dmqspi_map`, a writable window) with the commands it should send for a read (quad: `0xEB`, 6
+   dummy cycles; octal: the 16-bit `0x0000`, 10) and for a write (quad: `0x38`; octal: `0x8080`, 5).
+3. `verify` (default on): patterns written through the data cache, written back (`dmqspi_flush_mapped`), the cache dropped
+   (`dmqspi_invalidate_mapped`), read back; 8-bit accesses.
 4. `heap_usage`: `dmheap_init()` of the region, the tags `psram,external,slow`; `heap` leaves it on the default list (see below),
    `tagged` takes it off.
 5. The device `/dev/psram`.
@@ -67,7 +68,7 @@ takes the heap off the list.
 | | |
 |---|---|
 | Data bus (read/write) | `0x3D800000` .. `0x3E000000` (8 MB) |
-| Instruction bus (execute, 32-bit reads) | `0x43800000` .. `0x44000000` |
+| Instruction bus (execute, 32-bit reads) | `0x43800000` .. `0x44000000` (the loader of dmod knows this alias: `DMOD_CODE_ALIAS`) |
 | MMU entries | 384 .. 511 (the flash of the bank image uses the lower ones) |
 
 ## Boards

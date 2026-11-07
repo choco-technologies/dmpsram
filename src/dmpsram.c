@@ -14,9 +14,10 @@
  * and write it. The controller - the pads, the clock, the commands on the bus, the window in the address space of the CPU - is
  * the business of dmqspi (and its port): the driver sends commands to its node (DMQSPI_IOCTL_*) and asks it for the window.
  *
- * The controller is reached by a function call (dmqspi_ioctl), not through its node: the memory has to be a heap before the drivers that
- * follow this one are created, and the file system of the devices is not there yet. The module requires dmqspi, so dmdevfs configures the
- * controller first; the number of the controller (qspi_instance) is the `instance` of its section.
+ * The controller is reached through the functions of dmqspi (dmqspi_transfer, dmqspi_map, ...), keyed by its number (qspi_instance = the
+ * `instance` of its section): the memory has to be a heap before the drivers that follow this one are created, and the nodes of the devices
+ * (the friends of a driver) are there only after all the drivers are configured. The module requires dmqspi, so dmdevfs configures the
+ * controller first (it resolves the dependencies ahead of driver_order).
  */
 
 #define DMPSRAM_CONTEXT_MAGIC   0x4D505352  /* 'MPSR' */
@@ -32,11 +33,11 @@
 #define QUAD_CMD_READ_ID            0x9F
 #define QUAD_READ_DUMMY_CYCLES      6
 
-/* ---- Octal chips (AP Memory, 1.8 V; the OPI DTR mode: the byte of an instruction goes out twice, which the controller does) ---- */
-#define OCTAL_CMD_SYNC_READ         0x00
-#define OCTAL_CMD_SYNC_WRITE        0x80
-#define OCTAL_CMD_MR_READ           0x40
-#define OCTAL_CMD_MR_WRITE          0xC0
+/* ---- Octal chips (AP Memory, 1.8 V; the OPI DTR mode: a 16-bit instruction, the byte of the command twice) ---- */
+#define OCTAL_CMD_SYNC_READ         0x0000
+#define OCTAL_CMD_SYNC_WRITE        0x8080
+#define OCTAL_CMD_MR_READ           0x4040
+#define OCTAL_CMD_MR_WRITE          0xC0C0
 #define OCTAL_READ_DUMMY_CYCLES     10
 #define OCTAL_WRITE_DUMMY_CYCLES    5
 #define OCTAL_VENDOR_ID_AP          0xD
@@ -53,7 +54,6 @@ struct dmdrvi_context
     uint32_t                memory_size_bytes;  /**< Size of the mapped memory */
     uint32_t                chip_size_bytes;    /**< Size of the chip */
     uint32_t                frequency_hz;       /**< Clock the controller runs the chip at */
-    void                   *code_start;         /**< The same memory seen by the instruction bus (NULL: no such alias) */
     dmheap_context_t       *heap_ctx;   /**< dmheap context (only when config.heap_usage requests it) */
     dmqspi_instance_t       qspi;       /**< The controller the chip is wired to */
 };
@@ -104,7 +104,7 @@ static int quad_command(dmqspi_instance_t qspi, uint8_t instruction, bool qpi, u
         t.dir = dmqspi_dir_read;
         t.data = data;
     }
-    return dmqspi_ioctl(qspi, DMQSPI_IOCTL_TRANSFER, &t);
+    return dmqspi_transfer(qspi, &t);
 }
 
 /** Wakes a quad chip up: out of the QPI mode it may have been left in, its id, the reset, into the QPI mode. Returns its size or a negative errno. */
@@ -139,6 +139,7 @@ static int octal_register(dmqspi_instance_t qspi, bool write, uint32_t reg, uint
     dmqspi_transfer_t t;
     memset(&t, 0, sizeof(t));
     t.cmd.instruction = write ? OCTAL_CMD_MR_WRITE : OCTAL_CMD_MR_READ;
+    t.cmd.instruction_size = dmqspi_instr_16bit;
     t.cmd.instruction_lines = dmqspi_lines_8;
     t.cmd.address = reg;
     t.cmd.address_lines = dmqspi_lines_8;
@@ -149,7 +150,7 @@ static int octal_register(dmqspi_instance_t qspi, bool write, uint32_t reg, uint
     t.cmd.ddr = true;
     t.dir = write ? dmqspi_dir_write : dmqspi_dir_read;
     t.data = data;
-    return dmqspi_ioctl(qspi, DMQSPI_IOCTL_TRANSFER, &t);
+    return dmqspi_transfer(qspi, &t);
 }
 
 /** Wakes an octal chip up: the latency and the fixed latency in MR0, then what it says about itself (the vendor in MR1, the density in
@@ -177,11 +178,13 @@ static int octal_bring_up(dmqspi_instance_t qspi, uint8_t mr[6])
     return size != 0U ? (int)size : -ENODEV;
 }
 
-static int octal_map(dmqspi_instance_t qspi, dmqspi_mapped_rw_t *mapped)
+static int octal_map(dmqspi_instance_t qspi, dmqspi_map_info_t *info)
 {
-    memset(mapped, 0, sizeof(*mapped));
-    dmqspi_command_t *rd = &mapped->request.read_cmd;
+    dmqspi_map_request_t request;
+    memset(&request, 0, sizeof(request));
+    dmqspi_command_t *rd = &request.read_cmd;
     rd->instruction = OCTAL_CMD_SYNC_READ;
+    rd->instruction_size = dmqspi_instr_16bit;
     rd->instruction_lines = dmqspi_lines_8;
     rd->address_lines = dmqspi_lines_8;
     rd->address_size = dmqspi_addr_32bit;
@@ -189,23 +192,25 @@ static int octal_map(dmqspi_instance_t qspi, dmqspi_mapped_rw_t *mapped)
     rd->data_lines = dmqspi_lines_8;
     rd->ddr = true;
 
-    dmqspi_command_t *wr = &mapped->request.write_cmd;
+    dmqspi_command_t *wr = &request.write_cmd;
     wr->instruction = OCTAL_CMD_SYNC_WRITE;
+    wr->instruction_size = dmqspi_instr_16bit;
     wr->instruction_lines = dmqspi_lines_8;
     wr->address_lines = dmqspi_lines_8;
     wr->address_size = dmqspi_addr_32bit;
     wr->dummy_cycles = OCTAL_WRITE_DUMMY_CYCLES;
     wr->data_lines = dmqspi_lines_8;
     wr->ddr = true;
-    mapped->request.writable = true;
-    return dmqspi_ioctl(qspi, DMQSPI_IOCTL_ENTER_MAPPED_RW, mapped);
+    request.writable = true;
+    return dmqspi_map(qspi, &request, info);
 }
 
 /** The window the CPU reads and writes the chip through: the commands the controller sends for the accesses. */
-static int quad_map(dmqspi_instance_t qspi, dmqspi_mapped_rw_t *mapped)
+static int quad_map(dmqspi_instance_t qspi, dmqspi_map_info_t *info)
 {
-    memset(mapped, 0, sizeof(*mapped));
-    dmqspi_command_t *rd = &mapped->request.read_cmd;
+    dmqspi_map_request_t request;
+    memset(&request, 0, sizeof(request));
+    dmqspi_command_t *rd = &request.read_cmd;
     rd->instruction = QUAD_CMD_FAST_READ_QUAD;
     rd->instruction_lines = dmqspi_lines_4;
     rd->address_lines = dmqspi_lines_4;
@@ -213,26 +218,24 @@ static int quad_map(dmqspi_instance_t qspi, dmqspi_mapped_rw_t *mapped)
     rd->dummy_cycles = QUAD_READ_DUMMY_CYCLES;
     rd->data_lines = dmqspi_lines_4;
 
-    dmqspi_command_t *wr = &mapped->request.write_cmd;
+    dmqspi_command_t *wr = &request.write_cmd;
     wr->instruction = QUAD_CMD_QUAD_WRITE;
     wr->instruction_lines = dmqspi_lines_4;
     wr->address_lines = dmqspi_lines_4;
     wr->address_size = dmqspi_addr_24bit;
     wr->data_lines = dmqspi_lines_4;
-    mapped->request.writable = true;
-    return dmqspi_ioctl(qspi, DMQSPI_IOCTL_ENTER_MAPPED_RW, mapped);
+    request.writable = true;
+    return dmqspi_map(qspi, &request, info);
 }
 
 /**
- * Writes patterns through the data cache, pushes them out to the chip, throws the cache away and reads them back (through the
- * data bus and, when there is one, through the instruction bus). A chip that is set up wrongly (the timing, the dummy cycles)
- * gives memory that reads back, but not what was written - and the heap built on it would only fail much later, as corrupted
- * data. Words only: the instruction bus does not read bytes.
+ * Writes patterns through the data cache, pushes them out to the chip, throws the cache away and reads them back. A chip that is set
+ * up wrongly (the timing, the dummy cycles) gives memory that reads back, but not what was written - and the heap built on it would
+ * only fail much later, as corrupted data.
  */
 static int verify_access(dmdrvi_context_t context)
 {
     volatile uint32_t *data = (volatile uint32_t *)context->memory_start;
-    volatile uint32_t *code = (volatile uint32_t *)context->code_start;
     uint32_t words = context->memory_size_bytes / sizeof(uint32_t);
     uint32_t at[3] = { 0U, words / 2U, words - 32U };
     int ok = 1;
@@ -243,9 +246,9 @@ static int verify_access(dmdrvi_context_t context)
 
     for (int p = 0; p < 3; p++)
     {
-        uint32_t range[2] = { at[p] * (uint32_t)sizeof(uint32_t), 32U * (uint32_t)sizeof(uint32_t) };
-        if (dmqspi_ioctl(context->qspi, DMQSPI_IOCTL_INVALIDATE_MAPPED, range) != 0)
-            ok = 0;
+        uint32_t offset = at[p] * (uint32_t)sizeof(uint32_t), size = 32U * (uint32_t)sizeof(uint32_t);
+        dmqspi_flush_mapped(context->qspi, offset, size);           /* out to the chip */
+        dmqspi_invalidate_mapped(context->qspi, offset, size);      /* and the next read comes from there */
     }
 
     for (int p = 0; p < 3; p++)
@@ -253,7 +256,6 @@ static int verify_access(dmdrvi_context_t context)
         {
             uint32_t expected = 0xC3A5F00DU ^ (at[p] * 0x9E3779B1U) ^ (i * 0x01010101U);
             if (data[at[p] + i] != expected) ok = 0;
-            if (code != NULL && code[at[p] + i] != expected) ok = 0;
         }
 
     volatile uint8_t *b8 = (volatile uint8_t *)context->memory_start;
@@ -272,7 +274,7 @@ static int start(dmdrvi_context_t context)
 
     dmqspi_instance_t qspi = context->qspi;
     int chip = -ENOTSUP;
-    dmqspi_mapped_rw_t mapped;
+    dmqspi_map_info_t window;
     uint32_t id = 0;
     if (c->mode == dmpsram_mode_quad)
     {
@@ -303,22 +305,21 @@ static int start(dmdrvi_context_t context)
     if (chip <= 0)
         return chip < 0 ? chip : -ENODEV;
 
-    int ret = c->mode == dmpsram_mode_quad ? quad_map(qspi, &mapped) : octal_map(qspi, &mapped);
+    int ret = c->mode == dmpsram_mode_quad ? quad_map(qspi, &window) : octal_map(qspi, &window);
     if (ret != 0)
     {
         DMOD_LOG_ERROR("PSRAM: the controller could not map the chip (%d)\n", ret);
         return ret;
     }
 
-    context->memory_start = (void *)mapped.info.base;
-    context->memory_size_bytes = mapped.info.size;
+    context->memory_start = (void *)window.base;
+    context->memory_size_bytes = window.size;
     context->chip_size_bytes = (uint32_t)chip;
-    context->frequency_hz = mapped.info.clock_hz;
-    context->code_start = (void *)mapped.info.code_base;
+    context->frequency_hz = window.clock_hz;
 
     if (c->verify && verify_access(context) != 0)
     {
-        dmqspi_ioctl(qspi, DMQSPI_IOCTL_EXIT_MAPPED, NULL);
+        dmqspi_unmap(qspi);
         return -EIO;
     }
 
@@ -413,7 +414,7 @@ dmod_dmdrvi_dif_api_declaration(2.0, dmpsram, void, _free, ( dmdrvi_context_t co
         context->heap_ctx = NULL;
     }
 
-    dmqspi_ioctl(context->qspi, DMQSPI_IOCTL_EXIT_MAPPED, NULL);
+    dmqspi_unmap(context->qspi);
     context->magic = 0;
     Dmod_Free(context);
 }
@@ -486,9 +487,6 @@ dmod_dmdrvi_dif_api_declaration(2.0, dmpsram, int, _ioctl, ( dmdrvi_context_t co
             return 0;
         case dmpsram_ioctl_cmd_get_heap_context:
             *(dmheap_context_t **)arg = context->heap_ctx;
-            return 0;
-        case dmpsram_ioctl_cmd_get_code_start:
-            *(void **)arg = context->code_start;
             return 0;
         default:
             return -ENOTTY;
