@@ -87,20 +87,20 @@ static void read_config_parameters(dmdrvi_context_t context, dmini_context_t con
  *  is in the SPI mode, on four while it is in the QPI mode. */
 static int quad_command(dmqspi_instance_t qspi, uint8_t instruction, bool qpi, uint32_t data_bytes, void *data)
 {
-    dmqspi_transfer_t t;
+    dmqspi_transfer2_t t;
     memset(&t, 0, sizeof(t));
-    t.cmd.instruction = instruction;
-    t.cmd.instruction_lines = qpi ? dmqspi_lines_4 : dmqspi_lines_1;
+    t.cmd.cmd.instruction = instruction;
+    t.cmd.cmd.instruction_lines = qpi ? dmqspi_lines_4 : dmqspi_lines_1;
     if (instruction == QUAD_CMD_READ_ID)
     {
-        t.cmd.address = 0U;
-        t.cmd.address_lines = dmqspi_lines_1;
-        t.cmd.address_size = dmqspi_addr_24bit;
+        t.cmd.cmd.address = 0U;
+        t.cmd.cmd.address_lines = dmqspi_lines_1;
+        t.cmd.cmd.address_size = dmqspi_addr_24bit;
     }
     if (data_bytes != 0U)
     {
-        t.cmd.data_lines = dmqspi_lines_1;
-        t.cmd.data_size = data_bytes;
+        t.cmd.cmd.data_lines = dmqspi_lines_1;
+        t.cmd.cmd.data_size = data_bytes;
         t.dir = dmqspi_dir_read;
         t.data = data;
     }
@@ -136,18 +136,18 @@ static int quad_bring_up(dmqspi_instance_t qspi, uint32_t *id_out)
 /** A mode register of the octal chip (the 32-bit address is the number of the register): `bytes` of it read or written. */
 static int octal_register(dmqspi_instance_t qspi, bool write, uint32_t reg, uint8_t *data, uint32_t bytes)
 {
-    dmqspi_transfer_t t;
+    dmqspi_transfer2_t t;
     memset(&t, 0, sizeof(t));
     t.cmd.instruction = write ? OCTAL_CMD_MR_WRITE : OCTAL_CMD_MR_READ;
     t.cmd.instruction_size = dmqspi_instr_16bit;
-    t.cmd.instruction_lines = dmqspi_lines_8;
-    t.cmd.address = reg;
-    t.cmd.address_lines = dmqspi_lines_8;
-    t.cmd.address_size = dmqspi_addr_32bit;
-    t.cmd.dummy_cycles = write ? 0 : OCTAL_READ_DUMMY_CYCLES;
-    t.cmd.data_lines = dmqspi_lines_8;
-    t.cmd.data_size = bytes;
-    t.cmd.ddr = true;
+    t.cmd.cmd.instruction_lines = dmqspi_lines_8;
+    t.cmd.cmd.address = reg;
+    t.cmd.cmd.address_lines = dmqspi_lines_8;
+    t.cmd.cmd.address_size = dmqspi_addr_32bit;
+    t.cmd.cmd.dummy_cycles = write ? 0 : OCTAL_READ_DUMMY_CYCLES;
+    t.cmd.cmd.data_lines = dmqspi_lines_8;
+    t.cmd.cmd.data_size = bytes;
+    t.cmd.cmd.ddr = true;
     t.dir = write ? dmqspi_dir_write : dmqspi_dir_read;
     t.data = data;
     return dmqspi_transfer(qspi, &t);
@@ -182,25 +182,25 @@ static int octal_map(dmqspi_instance_t qspi, dmqspi_map_info_t *info)
 {
     dmqspi_map_request_t request;
     memset(&request, 0, sizeof(request));
-    dmqspi_command_t *rd = &request.read_cmd;
+    dmqspi_command2_t *rd = &request.read_cmd;
     rd->instruction = OCTAL_CMD_SYNC_READ;
     rd->instruction_size = dmqspi_instr_16bit;
-    rd->instruction_lines = dmqspi_lines_8;
-    rd->address_lines = dmqspi_lines_8;
-    rd->address_size = dmqspi_addr_32bit;
-    rd->dummy_cycles = OCTAL_READ_DUMMY_CYCLES;
-    rd->data_lines = dmqspi_lines_8;
-    rd->ddr = true;
+    rd->cmd.instruction_lines = dmqspi_lines_8;
+    rd->cmd.address_lines = dmqspi_lines_8;
+    rd->cmd.address_size = dmqspi_addr_32bit;
+    rd->cmd.dummy_cycles = OCTAL_READ_DUMMY_CYCLES;
+    rd->cmd.data_lines = dmqspi_lines_8;
+    rd->cmd.ddr = true;
 
-    dmqspi_command_t *wr = &request.write_cmd;
+    dmqspi_command2_t *wr = &request.write_cmd;
     wr->instruction = OCTAL_CMD_SYNC_WRITE;
     wr->instruction_size = dmqspi_instr_16bit;
-    wr->instruction_lines = dmqspi_lines_8;
-    wr->address_lines = dmqspi_lines_8;
-    wr->address_size = dmqspi_addr_32bit;
-    wr->dummy_cycles = OCTAL_WRITE_DUMMY_CYCLES;
-    wr->data_lines = dmqspi_lines_8;
-    wr->ddr = true;
+    wr->cmd.instruction_lines = dmqspi_lines_8;
+    wr->cmd.address_lines = dmqspi_lines_8;
+    wr->cmd.address_size = dmqspi_addr_32bit;
+    wr->cmd.dummy_cycles = OCTAL_WRITE_DUMMY_CYCLES;
+    wr->cmd.data_lines = dmqspi_lines_8;
+    wr->cmd.ddr = true;
     request.writable = true;
     return dmqspi_map(qspi, &request, info);
 }
@@ -210,20 +210,20 @@ static int quad_map(dmqspi_instance_t qspi, dmqspi_map_info_t *info)
 {
     dmqspi_map_request_t request;
     memset(&request, 0, sizeof(request));
-    dmqspi_command_t *rd = &request.read_cmd;
-    rd->instruction = QUAD_CMD_FAST_READ_QUAD;
-    rd->instruction_lines = dmqspi_lines_4;
-    rd->address_lines = dmqspi_lines_4;
-    rd->address_size = dmqspi_addr_24bit;
-    rd->dummy_cycles = QUAD_READ_DUMMY_CYCLES;
-    rd->data_lines = dmqspi_lines_4;
+    dmqspi_command2_t *rd = &request.read_cmd;
+    rd->cmd.instruction = QUAD_CMD_FAST_READ_QUAD;
+    rd->cmd.instruction_lines = dmqspi_lines_4;
+    rd->cmd.address_lines = dmqspi_lines_4;
+    rd->cmd.address_size = dmqspi_addr_24bit;
+    rd->cmd.dummy_cycles = QUAD_READ_DUMMY_CYCLES;
+    rd->cmd.data_lines = dmqspi_lines_4;
 
-    dmqspi_command_t *wr = &request.write_cmd;
-    wr->instruction = QUAD_CMD_QUAD_WRITE;
-    wr->instruction_lines = dmqspi_lines_4;
-    wr->address_lines = dmqspi_lines_4;
-    wr->address_size = dmqspi_addr_24bit;
-    wr->data_lines = dmqspi_lines_4;
+    dmqspi_command2_t *wr = &request.write_cmd;
+    wr->cmd.instruction = QUAD_CMD_QUAD_WRITE;
+    wr->cmd.instruction_lines = dmqspi_lines_4;
+    wr->cmd.address_lines = dmqspi_lines_4;
+    wr->cmd.address_size = dmqspi_addr_24bit;
+    wr->cmd.data_lines = dmqspi_lines_4;
     request.writable = true;
     return dmqspi_map(qspi, &request, info);
 }
