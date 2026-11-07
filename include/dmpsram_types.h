@@ -16,24 +16,12 @@ typedef enum
 } dmpsram_heap_usage_t;
 
 /**
- * @brief What the port is asked for
+ * @brief How the chip is wired to the controller (the lines of its bus)
  */
-typedef struct
+typedef enum
 {
-    uint32_t frequency_hz;   /**< Clock of the PSRAM (0 = the default of the port) */
-} dmpsram_port_config_t;
-
-/**
- * @brief What the port reports back after a successful configuration
- */
-typedef struct
-{
-    void     *memory_start;        /**< Base address of the mapped memory (the data bus) */
-    uint32_t  memory_size_bytes;   /**< Size of the mapped memory */
-    uint32_t  chip_size_bytes;     /**< Size of the chip (more than memory_size_bytes when the port does not map all of it) */
-    uint32_t  frequency_hz;        /**< Clock of the PSRAM that the port programmed */
-    uint32_t  vendor_id;           /**< Vendor id read from the chip */
-    void     *code_start;          /**< The same memory seen by the instruction bus (NULL when there is no such alias) */
-} dmpsram_port_result_t;
+    dmpsram_mode_octal = 0,          /**< 8 data lines, DDR (AP Memory, ESP32-S3R8 / FN16R8) */
+    dmpsram_mode_quad,               /**< 4 data lines, the chip in the QPI mode (APS6404, ESP-PSRAM64H, 64 Mbit) */
+} dmpsram_mode_t;
 
 #endif /* DMPSRAM_TYPES_H */

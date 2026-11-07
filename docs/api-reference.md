@@ -19,9 +19,4 @@
 
 Other commands (the generic ones that dmdevfs sends to every node) return `-ENOTTY`.
 
-## Port API (`dmpsram_port.h`)
-
-| Function | |
-|----------|---|
-| `int dmpsram_port_configure(const dmpsram_port_config_t *config, dmpsram_port_result_t *out_result)` | Brings the chip up and maps it. `-ENODEV` (no PSRAM or no answer), `-EBUSY` (already), `-ENOTSUP` (the clock), `-EIO` (the test of the cache) |
-| `int dmpsram_port_unconfigure(void)` | Unmaps the memory |
+The controller side (commands, the window) is the API of [dmqspi](https://github.com/choco-technologies/dmqspi): `dmqspi_ioctl()` and the `DMQSPI_IOCTL_*` commands.

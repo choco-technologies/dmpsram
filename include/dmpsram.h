@@ -1,6 +1,8 @@
 #ifndef DMPSRAM_H
 #define DMPSRAM_H
 
+#include <stdint.h>
+#include <stdbool.h>
 #include "dmpsram_defs.h"
 #include "dmpsram_types.h"
 #include "dmdrvi_ioctl.h"
@@ -10,7 +12,7 @@
  */
 typedef struct
 {
-    uint32_t              frequency_hz;   /**< Clock of the PSRAM (0 = the default of the port) */
+    dmpsram_mode_t        mode;           /**< The bus of the chip: octal (default) or quad */
     dmpsram_heap_usage_t  heap_usage;     /**< Whether to register the memory with dmheap */
     uint32_t              heap_alignment; /**< Alignment of the dmheap context (only with heap_usage=heap) */
     bool                  verify;         /**< Check that the memory holds data before it is used (default on) */
