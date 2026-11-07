@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.18)
 
-set(DMOD_CPU_FAMILY "esp32s3" CACHE STRING "Target CPU family")
-include(${CMAKE_CURRENT_SOURCE_DIR}/src/port/${DMOD_CPU_FAMILY}/config.cmake)
+# The code does not depend on the CPU: the module is built per architecture (-DDMOD_TOOLS_NAME=arch/<name>, as the release workflow does).
+# DMOD_CPU_FAMILY only decides which package of the modules whose packages are named by family dmod_link_modules() takes the headers from.
+set(DMOD_CPU_FAMILY "stm32f7" CACHE STRING "CPU family of the packages the headers are taken from")
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -75,11 +76,14 @@ target_include_directories(${DMOD_MODULE_NAME}_if INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+# dmdrvi: the driver interface (the friends of dmdevfs), dmini: the configuration, dmheap: the heap the memory is handed to, dmqspi: the
+# controller the chip is wired to (its commands and the window of the memory; its node is the friend of this driver)
 dmod_link_modules(${DMOD_MODULE_NAME}
     dmdrvi
     dmini
     dmheap@>=0.4
+    dmqspi
 )
 
-add_subdirectory(src/port)
-target_link_libraries(${DMOD_MODULE_NAME} ${DMOD_MODULE_NAME}_port_if)
+enable_testing()
+add_subdirectory(tests)

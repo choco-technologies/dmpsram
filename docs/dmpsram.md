@@ -1,23 +1,59 @@
 # dmpsram
 
+## Who does what
+
+| | |
+|---|---|
+| **dmqspi** (and its port) | The controller: the pads, the clock, the commands on the bus (`dmqspi_transfer`), the window in the address space of the CPU (`dmqspi_map`; the cache and the MMU on the ESP32-S3) |
+| **dmpsram** | The chip: how to wake it up, how big it is, which commands read and write it; the self-test, the heap, `/dev/psram` |
+
+The driver uses the controller through the functions of dmqspi (`dmqspi_transfer`, `dmqspi_map`, ...), keyed by the number of the controller
+(`qspi_instance`), not through its node: the memory has to be a heap before the drivers that follow it are created, and the nodes of the devices
+(what a friend of a driver is told about) are there only after all the drivers are configured. The module requires dmqspi, so dmdevfs configures
+the controller first (it resolves the dependencies ahead of `driver_order`).
+
+## Configuration
+
+Two sections of the ini file of the board (`configs/board/`): the controller and the chip.
+
+```ini
+[psram_qspi]                    ; dmqspi: the controller (its keys: see the documentation of dmqspi)
+driver_name=dmqspi
+driver_order=-6
+instance=1
+bank=2                          ; the chip select 1 (0 is the flash of the ESP32-S3)
+data_lines=4                    ; 4 (quad) or 8 (octal)
+clock_hz=20000000
+flash_size=8388608              ; the size of the chip: the window of the memory
+
+[dmpsram]
+driver_name=dmpsram
+driver_order=-5
+qspi_instance=1                 ; the `instance` of the controller section
+mode=quad                       ; quad | octal (default: octal)
+heap_usage=heap                 ; none | heap | tagged
+heap_alignment=16
+verify=on
+```
+
+`data_lines` of the controller and `mode` of the chip have to agree (4 - quad, 8 - octal).
+
 ## What the driver does
 
 `dmpsram_dmdrvi_create()` (called by dmdevfs for the driver configuration) does, in this order:
 
-1. `dmpsram_port_configure()`: brings the chip up and maps it. On the ESP32-S3:
-   - the pads of the octal bus (GPIO26 CS1, GPIO27/28 SPIHD/SPIWP, GPIO31/32 SPIQ/SPID: function 0; GPIO33-37 SPIIO4-7 and DQS:
-     function 4; the strongest drive), and the drive of the clock pads;
-   - no ECC (`SYSCON_SRAM_ACE0_ATTR` bit 8), the timing of the chip select, the clock of the chip (APB 80 MHz / 4 = 20 MHz);
-   - the mode registers of the chip over SPI1 (the ROM `esp_rom_opiflash_exec_cmd`, octal DDR): fixed latency, read latency, drive;
-     the vendor id (0x0D, AP Memory) and the density tell the size. No answer: `-ENODEV`;
-   - the commands, the dummy cycles and the octal DDR mode for the cache (SPI0);
-   - the pages of the chip into the MMU entries at the end of the 32 MB window of the cache: 8 MB at `0x3D800000` (data bus),
-     the same entries are seen by the instruction bus at `0x43800000`;
-   - a test of the cache: patterns written through the data cache, written back, the cache dropped, read back through both buses.
-2. `verify` (default on): patterns of 32 and 8 bits at the start, in the middle and at the end.
-3. `heap_usage`: `dmheap_init()` of the region, the tags `psram,external,slow`; `heap` leaves it on the default list (see
-   below), `tagged` takes it off.
-4. The device `/dev/psram`.
+1. Wakes the chip up with commands to the controller.
+   - **quad** (APS6404L, ESP-PSRAM64H: 64 Mbit): leave the QPI mode (`0xF5`), READ ID (`0x9F`, SPI mode: the KGD `0x5D` and the density in
+     the EID say it is a PSRAM and how big), reset (`0x66`, `0x99`), enter the QPI mode (`0x35`).
+   - **octal** (AP Memory, 1.8 V; the OPI DTR mode, 8 lines, DDR): the mode registers - the latency and the fixed latency in MR0, then
+     the vendor (MR1: `0x0D`) and the density (MR2). No answer: `-ENODEV`.
+2. Asks the controller to map the chip (`dmqspi_map`, a writable window) with the commands it should send for a read (quad: `0xEB`, 6
+   dummy cycles; octal: the 16-bit `0x0000`, 10) and for a write (quad: `0x38`; octal: `0x8080`, 5).
+3. `verify` (default on): patterns written through the data cache, written back (`dmqspi_flush_mapped`), the cache dropped
+   (`dmqspi_invalidate_mapped`), read back; 8-bit accesses.
+4. `heap_usage`: `dmheap_init()` of the region, the tags `psram,external,slow`; `heap` leaves it on the default list (see below),
+   `tagged` takes it off.
+5. The device `/dev/psram`.
 
 ## The heap
 
@@ -32,8 +68,22 @@ takes the heap off the list.
 | | |
 |---|---|
 | Data bus (read/write) | `0x3D800000` .. `0x3E000000` (8 MB) |
-| Instruction bus (execute, 32-bit reads) | `0x43800000` .. `0x44000000` |
+| Instruction bus (execute, 32-bit reads) | `0x43800000` .. `0x44000000` (the loader of dmod knows this alias: `DMOD_CODE_ALIAS`) |
 | MMU entries | 384 .. 511 (the flash of the bank image uses the lower ones) |
+
+## Boards
+
+| Board | Chip | File |
+|---|---|---|
+| Waveshare ESP32-S3-Touch-LCD-2.8 (ESP32-S3R8 / FN16R8) | 8 MB octal | `configs/board/esp32s3-lcd28.ini` |
+| LILYGO T-Deck Pro (ESP32-S3 + external chip) | 8 MB quad | `configs/board/t-deck-pro.ini` |
+
+In `flash.dmd` of the board (the controller is a module of its own, it has to be listed too):
+
+```text
+dmqspi
+dmpsram driver=board/t-deck-pro.ini
+```
 
 ## Limits
 
