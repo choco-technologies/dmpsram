@@ -76,6 +76,7 @@ takes the heap off the list.
 | Board | Chip | File |
 |---|---|---|
 | Waveshare ESP32-S3-Touch-LCD-2.8 (ESP32-S3R8 / FN16R8) | 8 MB octal | `configs/board/esp32s3-lcd28.ini` |
+| Elecrow DIS08070H, CrowPanel ESP32 HMI 7.0" (ESP32-S3-WROOM-1-N4R8) | 8 MB octal | `configs/board/elecrow-dis08070h.ini` |
 | LILYGO T-Deck Pro (ESP32-S3 + external chip) | 8 MB quad | `configs/board/t-deck-pro.ini` |
 
 In `flash.dmd` of the board (the controller is a module of its own, it has to be listed too):
