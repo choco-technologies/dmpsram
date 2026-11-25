@@ -35,7 +35,7 @@ verify=on
 ```
 
 The ini file of a board holds the section of the controller too (`dmqspi`, whose clock is the clock of the chip). `configs/board/esp32s3-lcd28.ini`
-is the one for the ESP32-S3 2.8" display board (octal), `configs/board/t-deck-pro.ini` for the LILYGO T-Deck Pro (quad). Install it with lines
+is the one for the ESP32-S3 2.8" display board (octal), `configs/board/elecrow-dis08070h.ini` for the Elecrow DIS08070H 7" HMI (octal, the same chip and wiring), `configs/board/t-deck-pro.ini` for the LILYGO T-Deck Pro (quad). Install it with lines
 in `flash.dmd` (the controller is a module of its own):
 
 ```
