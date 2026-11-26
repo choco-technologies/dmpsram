@@ -60,7 +60,7 @@ See [docs/](docs/README.md), or `dmf-man dmpsram`.
 
 ## Limits
 
-- 20 MHz for the octal chip, up to 40 MHz for the quad one: the faster clocks need the timing tuning of the MSPI (dmqspi refuses them).
+- The octal chip: 20 MHz by default, 40 MHz, and 80 MHz with dmqspi 0.4.2 or newer (it tunes the sampling of the data and falls back to 40 MHz if nothing reads back; the Elecrow board uses it). Up to 40 MHz for the quad one. An older dmqspi refuses the clocks above 40 MHz of the octal chip.
 - The memory is behind the cache of the CPU: DMA cannot use it, and it must not be touched with the cache disabled (the
   flash operations of the firmware).
 - `s32c1i` (the atomic compare-and-set of the Xtensa) does not work on it (ESP-IDF works around it in software): do not use
